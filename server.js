@@ -18,7 +18,10 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use(cors({
-  origin: "https://tripvilla-pq6o.onrender.com", 
+  origin: [
+    "http://localhost:8080",         // Local development
+    "https://tripvilla-pq6o.onrender.com" // Production URL
+  ],, 
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true
 }));
