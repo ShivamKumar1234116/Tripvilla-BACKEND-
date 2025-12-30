@@ -8,6 +8,7 @@ const db = require("./db.js");
 const hotel = require("./Routes/hotel.js");
 const restaurant = require("./Routes/restaurant.js");
 const user = require("./Routes/user.js");
+const feedbackform=require("./Routes/feedback.js");
 
 // ================== CONFIG ==================
 dotenv.config();
@@ -32,6 +33,7 @@ app.use(cors({
 app.use("/hotel", hotel);
 app.use("/restaurant", restaurant);
 app.use("/user", user);
+app.use("/feedback", feedbackform);
 
 // ================== SERVER LISTEN ==================
 const PORT = process.env.PORT || 8080;
