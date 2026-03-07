@@ -8,7 +8,7 @@ const db = require("./db.js");
 const hotel = require("./Routes/hotel.js");
 const restaurant = require("./Routes/restaurant.js");
 const user = require("./Routes/user.js");
-const feedbackform=require("./Routes/feedback.js");
+const feedbackform = require("./Routes/feedback.js");
 
 // ================== CONFIG ==================
 dotenv.config();
@@ -19,10 +19,10 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use(cors({
-   origin: [
-    // "http://localhost:5173",
-    // "http://localhost:5174",
-    // "http://localhost:8080",
+  origin: [
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:8080",
     "https://tripvilla-pq6o.onrender.com"
   ],
   methods: ["GET", "POST", "PUT", "DELETE"],
@@ -30,9 +30,9 @@ app.use(cors({
 }));
 
 // ================== ROUTES ==================
+app.use("/api", user); // User routes (signup, login, verify)
 app.use("/hotel", hotel);
 app.use("/restaurant", restaurant);
-app.use("/user", user);
 app.use("/feedback", feedbackform);
 
 // ================== SERVER LISTEN ==================

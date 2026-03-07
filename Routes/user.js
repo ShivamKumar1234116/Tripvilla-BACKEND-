@@ -1,150 +1,137 @@
-// ================= IMPORTS =================
 const express = require("express");
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
+const router = express.Router();
 const User = require("../models/usermodel");
-const Router = express.Router();
+const sendOTPEmail = require("../utils/emailservice");
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");  
+const otpgenerator = require("../utils/otpgen");
+const e = require("express");
+const otpStore = new Map();
 
 
-
-// ================= SIGNUP =================
-Router.post("/signup", async (req, res) => {
+//localhost:8080/api/signup
+router.post("/signup", async (req, res) => {
   try {
+
     const { username, email, password } = req.body;
 
-    // Basic validation
-    if (!username || !email || !password) {
-      return res.status(400).json({ message: "All fields are required" });
-    }
-
-    // Check existing user
+    // check existing user
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ message: "Email already registered" });
     }
 
-    // Hash password
+    // hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user
+    // create user
     const newUser = new User({
       username,
       email,
-      password: hashedPassword,
+      password: hashedPassword
     });
 
     await newUser.save();
 
-    // JWT token create
-    // JWT token create (signup route)
-const token = jwt.sign(
-  { id: newUser._id, email: newUser.email },
-  process.env.SECRET_KEY,
-  { expiresIn: "7d" }
-);
-
-
+    // ✅ important response
     res.status(201).json({
-      message: "User created successfully",
-      token,
-      data: {
-        id: newUser._id,
-        username: newUser.username,
-        email: newUser.email,
-      },
+      message: "User registered successfully"
     });
-  } catch (err) {
-    res.status(500).json({ message: "User not created", error: err.message });
+
+  } catch (error) {
+
+    console.error("Signup error:", error);
+
+    res.status(500).json({
+      message: "Server error during signup"
+    });
+
   }
 });
 
-// ================= LOGIN =================
-Router.post("/login", async (req, res) => {
+//localhost:8080/api/send-otp
+router.post("/send-otp", async (req, res) => {
   try {
-    const { email, password } = req.body;
-
-    // Validation
-    if (!email || !password) {
-      return res.status(400).json({ message: "All fields are required" });
-    }
-
-    // Find user
+    const { email } = req.body;     
+    // Check if user exists
     const user = await User.findOne({ email });
-    if (!user) return res.status(401).json({ message: "Invalid email or password" });
-
-    // Compare password
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(401).json({ message: "Invalid email or password" });
-
-    // Generate token
-  const token = jwt.sign(
-  { id: user._id, email: user.email },
-  process.env.SECRET_KEY,
-  { expiresIn: "7d" }
-);
-
-
-    res.status(200).json({
-      message: "Login successful",
-      token,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-      },
-    });
-  } catch (err) {
-    res.status(500).json({ message: "Login failed", error: err.message });
-  }
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    } 
+    // Generate OTP
+    const otp = otpgenerator();
+    // Save OTP to user document (you can also set an expiration time)
+     otpStore.set(email, {
+    otp,
+    expiry: Date.now() + 10 * 60 * 1000
+  });
+    await user.save();  
+    // Send OTP email
+    await sendOTPEmail(email, otp);
+    res.json({ message: "OTP sent to email" });
+  } catch (error) {
+    console.error("Error sending OTP:", error);
+    res.status(500).json({ message: "Server error during OTP generation" });
+  } 
 });
 
-// ================= GET ALL USERS =================
-Router.get("/getall", async (req, res) => {
+router.post("/verify-email", async (req, res) => {
   try {
-    const allUsers = await User.find({});
-    if (!allUsers.length) {
-      return res.status(404).json({ message: "No users found" });
+
+    const { email, otp } = req.body;
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
     }
-    res.status(200).json({ message: "Users fetched successfully", data: allUsers });
-  } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
-});
 
-// ================= GET USER BY ID =================
-Router.get("/:id", async (req, res) => {
-  try {
-    const data = await User.findById(req.params.id);
-    if (!data) return res.status(404).json({ message: "User not found" });
-    res.status(200).json({ message: "User found", data });
-  } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
-});
+    const record = otpStore.get(email);
 
-// ================= UPDATE USER =================
-Router.patch("/update/:id", async (req, res) => {
-  try {
-    const updated = await User.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
+    console.log("OTP record from store:", record);
+
+    if (!record || record.otp.toString() !== otp.toString()) {
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
+
+    user.isVerified = true;
+    await user.save();
+
+    otpStore.delete(email);
+
+    res.json({ message: "Email verified successfully" });
+
+  } catch (error) {
+
+    console.error("Error verifying email:", error);
+
+    res.status(500).json({
+      message: "Server error during email verification"
     });
-    if (!updated) return res.status(404).json({ message: "User not found" });
-    res.status(200).json({ message: "User updated successfully", data: updated });
-  } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
+
   }
 });
 
-// ================= DELETE USER =================
-Router.delete("/delete/:id", async (req, res) => {
+//http://localhost:8080/api/login
+router.post("/login", async (req, res) => {
   try {
-    const deleted = await User.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ message: "User not found" });
-    res.status(200).json({ message: "User deleted successfully", data: deleted });
-  } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
+    const { email, password } = req.body;     
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    } 
+    if (!user.isVerified) {
+      return res.status(403).json({ message: "Email not verified" });
+    }
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Invalid credentials" });
+    } 
+    const token = jwt.sign({ userId: user._id }, "your_jwt_secret", { expiresIn: "1h" });
+    res.json({ token });
+  } catch (error) {
+    console.error("Login error:", error);
+    res.status(500).json({ message: "Server error during login" });
   }
 });
-
-module.exports = Router;
+module.exports = router;
